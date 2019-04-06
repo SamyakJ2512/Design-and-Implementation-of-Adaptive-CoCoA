@@ -49,9 +49,7 @@ import org.contikios.cooja.MoteType;
 import org.contikios.cooja.Simulation;
 import org.contikios.cooja.dialogs.CompileContiki;
 import org.contikios.cooja.dialogs.MessageList;
-import org.contikios.cooja.dialogs.MessageListText;
-import org.contikios.cooja.dialogs.MessageListUI;
-import org.contikios.cooja.dialogs.MessageContainer;
+import org.contikios.cooja.dialogs.MessageList.MessageContainer;
 import org.contikios.cooja.interfaces.IPAddress;
 import org.contikios.cooja.interfaces.Mote2MoteRelations;
 import org.contikios.cooja.interfaces.MoteAttributes;
@@ -77,7 +75,7 @@ public class TyndallMoteType extends MspMoteType {
   throws MoteTypeCreationException {
 
     /* If visualized, show compile dialog and let user configure */
-    if (visAvailable && !simulation.isQuickSetup()) {
+    if (visAvailable) {
 
       /* Create unique identifier */
       if (getIdentifier() == null) {
@@ -114,7 +112,7 @@ public class TyndallMoteType extends MspMoteType {
       throw new MoteTypeCreationException("No identifier");
     }
 
-    final MessageList compilationOutput = MessageContainer.createMessageList(visAvailable);
+    final MessageList compilationOutput = new MessageList();
 
     if (getCompileCommands() != null) {
       /* Handle multiple compilation commands one by one */

@@ -60,9 +60,6 @@
 #undef NETSTACK_CONF_RDC
 #define NETSTACK_CONF_RDC              nullrdc_driver
 
-#undef RPL_CONF_MAX_DAG_PER_INSTANCE
-#define RPL_CONF_MAX_DAG_PER_INSTANCE     1
-
 /* Disabling TCP on CoAP nodes. */
 #undef UIP_CONF_TCP
 #define UIP_CONF_TCP                   0
@@ -96,10 +93,10 @@
 #undef COAP_PROXY_OPTION_PROCESSING
 #define COAP_PROXY_OPTION_PROCESSING   0
 
-/* Turn off DAO ACK to make code smaller */
-#undef RPL_CONF_WITH_DAO_ACK
-#define RPL_CONF_WITH_DAO_ACK          0
-
 /* Enable client-side support for COAP observe */
 #define COAP_OBSERVE_CLIENT 1
 #endif /* __PROJECT_ERBIUM_CONF_H__ */
+
+/* CoCoA Enable */
+
+#define COCOA 1

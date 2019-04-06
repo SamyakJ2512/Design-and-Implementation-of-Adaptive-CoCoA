@@ -1,6 +1,19 @@
-er-coap_src = er-coap.c er-coap-engine.c er-coap-transactions.c      \
-  er-coap-observe.c er-coap-separate.c er-coap-res-well-known-core.c \
-  er-coap-block1.c er-coap-observe-client.c
+
+ifeq (,$(findstring -DCOCOA,$(CFLAGS)))
+er-coap_src = er-coap.c er-coap-engine.c er-coap-transactions.c er-coap-observe.c er-coap-separate.c er-coap-res-well-known-core.c 
+else
+er-coap_src = er-coap.c er-coap-engine.c er-coap-transactions.c er-coap-observe.c er-coap-separate.c er-coap-res-well-known-core.c er-cocoa.c 
+endif
+
 
 # Erbium will implement the REST Engine
 CFLAGS += -DREST=coap_rest_implementation
+CFLAGS += -lm
+LDFLAGS += -lm
+TARGET_LIBFILES += -lm
+
+## Enable LARGE MEMORY MODEL supports for WISMOTE and EXP5438 platform 
+#ifeq ($(TARGET),wismote)
+#  TARGET_MEMORY_MODEL = large
+#endif
+

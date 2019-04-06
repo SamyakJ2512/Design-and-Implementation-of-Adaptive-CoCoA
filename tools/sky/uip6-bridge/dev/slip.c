@@ -112,6 +112,9 @@ slip_send(void)
 
   ptr = &uip_buf[UIP_LLH_LEN];
   for(i = 0; i < uip_len; ++i) {
+    if(i == UIP_TCPIP_HLEN) {
+      ptr = (uint8_t *)uip_appdata;
+    }
     c = *ptr++;
     if(c == SLIP_END) {
       slip_arch_writeb(SLIP_ESC);
@@ -291,7 +294,7 @@ PROCESS_THREAD(slip_process, ev, data)
         tcpip_input();
       }
     } else {
-      uip_clear_buf();
+      uip_len = 0;
       SLIP_STATISTICS(slip_ip_drop++);
     }
 #else /* NETSTACK_CONF_WITH_IPV6 */

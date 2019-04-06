@@ -41,21 +41,14 @@
 #include "er-coap-transactions.h"
 #include "er-coap-observe.h"
 
-#define DEBUG 0
-#if DEBUG
-#include <stdio.h>
-#define PRINTF(...) printf(__VA_ARGS__)
-#define PRINT6ADDR(addr) PRINTF("[%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x]", ((uint8_t *)addr)[0], ((uint8_t *)addr)[1], ((uint8_t *)addr)[2], ((uint8_t *)addr)[3], ((uint8_t *)addr)[4], ((uint8_t *)addr)[5], ((uint8_t *)addr)[6], ((uint8_t *)addr)[7], ((uint8_t *)addr)[8], ((uint8_t *)addr)[9], ((uint8_t *)addr)[10], ((uint8_t *)addr)[11], ((uint8_t *)addr)[12], ((uint8_t *)addr)[13], ((uint8_t *)addr)[14], ((uint8_t *)addr)[15])
-#define PRINTLLADDR(lladdr) PRINTF("[%02x:%02x:%02x:%02x:%02x:%02x]", (lladdr)->addr[0], (lladdr)->addr[1], (lladdr)->addr[2], (lladdr)->addr[3], (lladdr)->addr[4], (lladdr)->addr[5])
-#else
-#define PRINTF(...)
-#define PRINT6ADDR(addr)
-#define PRINTLLADDR(addr)
-#endif
+#define DEBUG   DEBUG_NONE
+#include "ip/uip-debug.h"
 
 /*---------------------------------------------------------------------------*/
 MEMB(transactions_memb, coap_transaction_t, COAP_MAX_OPEN_TRANSACTIONS);
 LIST(transactions_list);
+int failed = 0;
+int success = 0;
 
 static struct process *transaction_handler_process = NULL;
 
@@ -67,9 +60,17 @@ coap_register_as_transaction_handler()
 {
   transaction_handler_process = PROCESS_CURRENT();
 }
+
 coap_transaction_t *
-coap_new_transaction(uint16_t mid, uip_ipaddr_t *addr, uint16_t port)
+coap_new_transaction(uint16_t mid, uip_ipaddr_t * addr, uint16_t port)
 {
+  #ifdef COCOA
+  //AUGUST
+  if(countTransactionsForAddress(addr, transactions_list) >= NSTART){
+	PRINTF("NSTART limit reached!\n");
+	return NULL;
+  }
+  #endif
   coap_transaction_t *t = memb_alloc(&transactions_memb);
 
   if(t) {
@@ -87,7 +88,7 @@ coap_new_transaction(uint16_t mid, uip_ipaddr_t *addr, uint16_t port)
 }
 /*---------------------------------------------------------------------------*/
 void
-coap_send_transaction(coap_transaction_t *t)
+coap_send_transaction(coap_transaction_t * t)
 {
   PRINTF("Sending transaction %u\n", t->mid);
 
@@ -95,31 +96,57 @@ coap_send_transaction(coap_transaction_t *t)
 
   if(COAP_TYPE_CON ==
      ((COAP_HEADER_TYPE_MASK & t->packet[0]) >> COAP_HEADER_TYPE_POSITION)) {
+
     if(t->retrans_counter < COAP_MAX_RETRANSMIT) {
       /* not timed out yet */
+	/* Atleast 1 retransmission has occured */
       PRINTF("Keeping transaction %u\n", t->mid);
 
       if(t->retrans_counter == 0) {
+      //August
+	  #ifdef COCOA
+    	  clock_time_t storedRto = coap_check_rtt_estimation(&t->addr, transactions_list);
+    	  t->retrans_timer.timer.interval = storedRto+ random_rand()% (storedRto >> 1);
+    	  t->start_rto = storedRto;
+    	  t->timestamp = clock_time();
+      #else
         t->retrans_timer.timer.interval =
           COAP_RESPONSE_TIMEOUT_TICKS + (random_rand()
                                          %
                                          (clock_time_t)
                                          COAP_RESPONSE_TIMEOUT_BACKOFF_MASK);
+	  #endif
         PRINTF("Initial interval %f\n",
                (float)t->retrans_timer.timer.interval / CLOCK_SECOND);
       } else {
+		#ifdef COCOA
+
+    	t->retrans_timer.timer.interval = coap_check_rto_state(t->retrans_timer.timer.interval, t->start_rto,&t->addr);
+    	t->retrans_timer.timer.interval = (t->retrans_timer.timer.interval > MAXRTO_VALUE) ? MAXRTO_VALUE : t->retrans_timer.timer.interval;
+    	PRINTF("Increased (%u) interval %f\n", t->retrans_counter,
+    	                      (float)t->retrans_timer.timer.interval / CLOCK_SECOND);
+    	#else
         t->retrans_timer.timer.interval <<= 1;  /* double */
         PRINTF("Doubled (%u) interval %f\n", t->retrans_counter,
-               (float)t->retrans_timer.timer.interval / CLOCK_SECOND);
+                      (float)t->retrans_timer.timer.interval / CLOCK_SECOND);
+		#endif
+
       }
 
-      PROCESS_CONTEXT_BEGIN(transaction_handler_process);
+      /*FIXME
+       * Hack: Setting timer for responsible process.
+       * Maybe there is a better way, but avoid posting everything to the process.
+       */
+      struct process *process_actual = PROCESS_CURRENT();
+
+      process_current = transaction_handler_process;
       etimer_restart(&t->retrans_timer);        /* interval updated above */
-      PROCESS_CONTEXT_END(transaction_handler_process);
+      process_current = process_actual;
 
       t = NULL;
     } else {
       /* timed out */
+      /* No retransmission has occured yet*/
       PRINTF("Timeout\n");
       restful_response_handler callback = t->callback;
       void *callback_data = t->callback_data;
@@ -139,22 +166,32 @@ coap_send_transaction(coap_transaction_t *t)
 }
 /*---------------------------------------------------------------------------*/
 void
-coap_clear_transaction(coap_transaction_t *t)
+coap_clear_transaction(coap_transaction_t * t)
 {
   if(t) {
     PRINTF("Freeing transaction %u: %p\n", t->mid, t);
-
+	#ifdef COCOA
+	  if(t->retrans_counter <= COAP_MAX_RETRANSMIT){
+		//August: Check if this was a CONFIRMABLE that actually provides RTT measurements
+		if(COAP_TYPE_CON==((COAP_HEADER_TYPE_MASK & t->packet[0])>>COAP_HEADER_TYPE_POSITION)){
+			//AUGUST: before clearing transaction store RTT info
+			clock_time_t rtt = clock_time() - t->timestamp;
+			coap_update_rtt_estimation(&t->addr, rtt, t->retrans_counter);
+		}
+	  }
+    #endif
     etimer_stop(&t->retrans_timer);
     list_remove(transactions_list, t);
     memb_free(&transactions_memb, t);
   }
 }
+
 coap_transaction_t *
 coap_get_transaction_by_mid(uint16_t mid)
 {
   coap_transaction_t *t = NULL;
 
-  for(t = (coap_transaction_t *)list_head(transactions_list); t; t = t->next) {
+  for(t = (coap_transaction_t *) list_head(transactions_list); t; t = t->next) {
     if(t->mid == mid) {
       PRINTF("Found transaction for MID %u: %p\n", t->mid, t);
       return t;
@@ -168,12 +205,23 @@ coap_check_transactions()
 {
   coap_transaction_t *t = NULL;
 
-  for(t = (coap_transaction_t *)list_head(transactions_list); t; t = t->next) {
+  for(t = (coap_transaction_t *) list_head(transactions_list); t; t = t->next) {
     if(etimer_expired(&t->retrans_timer)) {
-      ++(t->retrans_counter);
+      
+    ++(t->retrans_counter);
+
+    if(t->retrans_counter >= COAP_MAX_RETRANSMIT){
+	failed = failed + 1;
+     }
       PRINTF("Retransmitting %u (%u)\n", t->mid, t->retrans_counter);
       coap_send_transaction(t);
-    }
+    }else
+{
+	success=success+1;
+}
   }
+
+  PRINTF("throughput = %ld",(unsigned long)(success/(success + failed)*100));
+
 }
 /*---------------------------------------------------------------------------*/

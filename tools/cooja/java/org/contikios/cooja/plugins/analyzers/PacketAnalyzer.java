@@ -18,7 +18,6 @@ public abstract class PacketAnalyzer {
     int level;
     /* size = length - consumed bytes at tail */
     int size;
-    long ts;  /* in microseconds */
 
     /* L2 addresseses */
     byte[] llsender;
@@ -26,11 +25,10 @@ public abstract class PacketAnalyzer {
 
     byte lastDispatch = 0;
 
-    public Packet(byte[] data, int level, long ts) {
+    public Packet(byte[] data, int level) {
       this.level = level;
-      this.data = data.clone();
+      this.data = data;
       this.size = data.length;
-      this.ts = ts;
     }
 
     public void consumeBytesStart(int bytes) {
@@ -80,10 +78,6 @@ public abstract class PacketAnalyzer {
 
     public byte[] getLLReceiver() {
       return llreceiver;
-    }
-
-    public long getTimestamp() {
-      return ts;
     }
   };
 

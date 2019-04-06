@@ -133,14 +133,12 @@ import org.contikios.cooja.dialogs.ConfigurationWizard;
 import org.contikios.cooja.dialogs.CreateSimDialog;
 import org.contikios.cooja.dialogs.ExternalToolsDialog;
 import org.contikios.cooja.dialogs.MessageList;
-import org.contikios.cooja.dialogs.MessageListUI;
 import org.contikios.cooja.dialogs.ProjectDirectoriesDialog;
 import org.contikios.cooja.plugins.MoteTypeInformation;
 import org.contikios.cooja.plugins.ScriptRunner;
 import org.contikios.cooja.plugins.SimControl;
 import org.contikios.cooja.plugins.SimInformation;
 import org.contikios.cooja.util.ExecuteJAR;
-import org.contikios.cooja.util.ScnObservable;
 
 /**
  * Main file of COOJA Simulator. Typically contains a visualizer for the
@@ -327,10 +325,21 @@ public class Cooja extends Observable {
 
   private Vector<Class<? extends Positioner>> positionerClasses = new Vector<Class<? extends Positioner>>();
 
+  private class HighlightObservable extends Observable {
+    private void setChangedAndNotify(Mote mote) {
+      setChanged();
+      notifyObservers(mote);
+    }
+  }
+  private HighlightObservable moteHighlightObservable = new HighlightObservable();
 
-  private ScnObservable moteHighlightObservable = new ScnObservable();
-
-  private ScnObservable moteRelationObservable = new ScnObservable();
+  private class MoteRelationsObservable extends Observable {
+    private void setChangedAndNotify() {
+      setChanged();
+      notifyObservers();
+    }
+  }
+  private MoteRelationsObservable moteRelationObservable = new MoteRelationsObservable();
 
   private JTextPane quickHelpTextPane;
   private JScrollPane quickHelpScroll;
@@ -3378,7 +3387,7 @@ public class Cooja extends Observable {
       }
 
       /* Verify extension directories */
-      boolean projectsOk = verifyProjects(root.getChildren());
+      boolean projectsOk = verifyProjects(root.getChildren(), !quick);
 
       /* GENERATE UNIQUE MOTE TYPE IDENTIFIERS */
       root.detach();
@@ -3428,8 +3437,7 @@ public class Cooja extends Observable {
           Collection<Element> config = ((Element) element).getChildren();
           newSim = new Simulation(this);
           System.gc();
-          
-          boolean createdOK = newSim.setConfigXML(config, isVisualized(), quick, manualRandomSeed);
+          boolean createdOK = newSim.setConfigXML(config, !quick, manualRandomSeed);
           if (!createdOK) {
             logger.info("Simulation not loaded");
             return null;
@@ -3438,7 +3446,7 @@ public class Cooja extends Observable {
       }
 
       // Restart plugins from config
-      setPluginsConfigXML(root.getChildren(), newSim, isVisualized(), quick);
+      setPluginsConfigXML(root.getChildren(), newSim, !quick);
 
     } catch (JDOMException e) {
       throw (SimulationCreationException) new SimulationCreationException(
@@ -3482,9 +3490,7 @@ public class Cooja extends Observable {
       }
 
       XMLOutputter outputter = new XMLOutputter();
-      Format fmt = Format.getPrettyFormat();
-      fmt.setLineSeparator("\n");
-      outputter.setFormat(fmt);
+      outputter.setFormat(Format.getPrettyFormat());
       outputter.output(doc, out);
       out.close();
 
@@ -3600,7 +3606,7 @@ public class Cooja extends Observable {
     return config;
   }
 
-  public boolean verifyProjects(Collection<Element> configXML) {
+  public boolean verifyProjects(Collection<Element> configXML, boolean visAvailable) {
     boolean allOk = true;
 
     /* Match current extensions against extensions in simulation config */
@@ -3642,8 +3648,8 @@ public class Cooja extends Observable {
    * @return True if all plugins started, false otherwise
    */
   public boolean setPluginsConfigXML(Collection<Element> configXML,
-      Simulation simulation, boolean visAvailable, boolean quick) {
-      
+      Simulation simulation, boolean visAvailable) {
+
     for (final Element pluginElement : configXML.toArray(new Element[0])) {
       if (pluginElement.getName().equals("plugin")) {
 
@@ -3836,7 +3842,7 @@ public class Cooja extends Observable {
           /* Contiki error */
           if (exception instanceof ContikiError) {
             String contikiError = ((ContikiError) exception).getContikiError();
-            MessageListUI list = new MessageListUI();
+            MessageList list = new MessageList();
             for (String l: contikiError.split("\n")) {
               list.addMessage(l);
             }
@@ -3845,14 +3851,14 @@ public class Cooja extends Observable {
           }
 
           /* Compilation output */
-          MessageListUI compilationOutput = null;
+          MessageList compilationOutput = null;
           if (exception instanceof MoteTypeCreationException
               && ((MoteTypeCreationException) exception).hasCompilationOutput()) {
-            compilationOutput = (MessageListUI) ((MoteTypeCreationException) exception).getCompilationOutput();
+            compilationOutput = ((MoteTypeCreationException) exception).getCompilationOutput();
           } else if (exception.getCause() != null
               && exception.getCause() instanceof MoteTypeCreationException
               && ((MoteTypeCreationException) exception.getCause()).hasCompilationOutput()) {
-            compilationOutput = (MessageListUI) ((MoteTypeCreationException) exception.getCause()).getCompilationOutput();
+            compilationOutput = ((MoteTypeCreationException) exception.getCause()).getCompilationOutput();
           }
           if (compilationOutput != null) {
             compilationOutput.addPopupMenuItem(null, true);
@@ -3860,8 +3866,8 @@ public class Cooja extends Observable {
           }
 
           /* Stack trace */
-          MessageListUI stackTrace = new MessageListUI();
-          PrintStream printStream = stackTrace.getInputStream(MessageListUI.NORMAL);
+          MessageList stackTrace = new MessageList();
+          PrintStream printStream = stackTrace.getInputStream(MessageList.NORMAL);
           exception.printStackTrace(printStream);
           stackTrace.addPopupMenuItem(null, true);
           tabbedPane.addTab("Java stack trace", new JScrollPane(stackTrace));
@@ -3933,7 +3939,7 @@ public class Cooja extends Observable {
         Box buttonBox = Box.createHorizontalBox();
 
         /* Warnings message list */
-        MessageListUI compilationOutput = new MessageListUI();
+        MessageList compilationOutput = new MessageList();
         for (String w: warnings) {
           compilationOutput.addMessage(w, MessageList.ERROR);
         }
@@ -4356,14 +4362,14 @@ public class Cooja extends Observable {
   private static JProgressBar PROGRESS_BAR = null;
   private static ArrayList<String> PROGRESS_WARNINGS = new ArrayList<String>();
   public static void setProgressMessage(String msg) {
-    setProgressMessage(msg, MessageListUI.NORMAL);
+    setProgressMessage(msg, MessageList.NORMAL);
   }
   public static void setProgressMessage(String msg, int type) {
     if (PROGRESS_BAR != null && PROGRESS_BAR.isShowing()) {
       PROGRESS_BAR.setString(msg);
       PROGRESS_BAR.setStringPainted(true);
     }
-    if (type != MessageListUI.NORMAL) {
+    if (type != MessageList.NORMAL) {
       PROGRESS_WARNINGS.add(msg);
     }
   }

@@ -52,11 +52,8 @@ import org.contikios.cooja.mote.memory.VarMemory;
  * Contiki variables:
  * <ul>
  * <li>clock_time_t simCurrentTime
- * <li>rtimer_clock_t simRtimerCurrentTicks
- * <li>clock_time_t simEtimerNextExpirationTime
- * <li>rtimer_clock_t simEtimerNextExpirationTime
- * <li>int simEtimerProcessRunValue
- * <li>int simRtimerProcessRunValue
+ * <li>clock_time_t simNextExpirationTime
+ * <li>int simProcessRunValue
  * <li>int simEtimerPending
  * </ul>
  *
@@ -128,24 +125,16 @@ public class ContikiClock extends Clock implements ContikiMoteInterface, PolledB
 
   public void doActionsBeforeTick() {
     /* Update time */
-    long currentSimulationTime = simulation.getSimulationTime();
-    setTime(currentSimulationTime + timeDrift);
-    moteMem.setInt64ValueOf("simRtimerCurrentTicks", currentSimulationTime);
+    setTime(mote.getSimulation().getSimulationTime() + timeDrift);
   }
 
   public void doActionsAfterTick() {
-    long currentSimulationTime = mote.getSimulation().getSimulationTime();
-
-    /* Always schedule for Rtimer if anything pending */
-    if (moteMem.getIntValueOf("simRtimerPending") != 0) {
-      mote.scheduleNextWakeup(moteMem.getInt64ValueOf("simRtimerNextExpirationTime"));
-    }
 
     /* Request next tick for remaining events / timers */
     int processRunValue = moteMem.getIntValueOf("simProcessRunValue");
     if (processRunValue != 0) {
       /* Handle next Contiki event in one millisecond */
-      mote.scheduleNextWakeup(currentSimulationTime + Simulation.MILLISECOND);
+      mote.scheduleNextWakeup(simulation.getSimulationTime() + Simulation.MILLISECOND);
       return;
     }
 
@@ -155,20 +144,15 @@ public class ContikiClock extends Clock implements ContikiMoteInterface, PolledB
       return;
     }
 
-    /* Request tick next wakeup time for Etimer */
-    long etimerNextExpirationTime = (long)moteMem.getInt32ValueOf("simEtimerNextExpirationTime") * Simulation.MILLISECOND;
-    long etimerTimeToNextExpiration = etimerNextExpirationTime - moteTime;
-    if (etimerTimeToNextExpiration <= 0) {
-      /* logger.warn(mote.getID() + ": Event timer already expired, but has been delayed: " + etimerTimeToNextExpiration); */
-      /* Wake up in one millisecond to handle a missed Etimer task
-       * which may be blocked by busy waiting such as one in
-       * radio_send(). Scheduling it in a shorter time than one
-       * millisecond, e.g., one microsecond, seems to be worthless and
-       * it would cause unnecessary CPU usage. */
-      mote.scheduleNextWakeup(currentSimulationTime + Simulation.MILLISECOND);
-    } else {
-      mote.scheduleNextWakeup(currentSimulationTime + etimerTimeToNextExpiration);
+    /* Request tick next wakeup time */
+    int nextExpirationTime = moteMem.getIntValueOf("simNextExpirationTime");
+    if (nextExpirationTime <= 0) {
+      /*logger.warn("Event timer already expired, but has been delayed: " + nextExpirationTime);*/
+      mote.scheduleNextWakeup(simulation.getSimulationTime() + Simulation.MILLISECOND);
+      return;
     }
+
+    mote.scheduleNextWakeup(simulation.getSimulationTime() + Simulation.MILLISECOND*nextExpirationTime);
   }
 
 

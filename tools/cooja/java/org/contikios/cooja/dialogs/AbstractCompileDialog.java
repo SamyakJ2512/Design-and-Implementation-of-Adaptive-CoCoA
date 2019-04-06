@@ -468,7 +468,7 @@ public abstract class AbstractCompileDialog extends JDialog {
 
   protected String[] compilationEnvironment = null; /* Default environment: inherit from current process */
   public void compileContiki() throws Exception {
-    final MessageListUI taskOutput = new MessageListUI();
+    final MessageList taskOutput = new MessageList();
 
     if (contikiFirmware.exists()) {
       contikiFirmware.delete();
@@ -861,7 +861,7 @@ public abstract class AbstractCompileDialog extends JDialog {
     currentCompilationProcess = null;
   }
 
-  private boolean createNewCompilationTab(MessageListUI output) {
+  private boolean createNewCompilationTab(MessageList output) {
     abortAnyCompilation();
     tabbedPane.remove(currentCompilationOutput);
 
