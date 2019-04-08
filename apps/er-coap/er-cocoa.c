@@ -41,7 +41,10 @@
 // K-Value and weighting for the strong and weak estimators, respectively
 static uint8_t kValue[] = {4,1};
 static double weight[] = {0.5, 0.25};
-static uint8_t VBF = 1;
+static double VBF = 3;
+static double a = 0;
+static double b = 1;
+
 
 /* exp function
 
@@ -125,18 +128,21 @@ clock_time_t coap_check_rto_state(clock_time_t rto, clock_time_t oldrto,uip_ipad
 	
 
 	//printf("PBF = %d  ",(int)pbf);
+        if(oldrto > 0)
+        {
+         a = 2 - rto / oldrto;
+         b = oldrto / rto;
+        }
 	
 	
 	if(avg_delta_min > 0 && pbf>ran_no)
 	{
-		VBF = VBF + 2;
+		VBF = VBF + a;
 	}
 	else
 	{
-	  
-	    VBF = VBF * 0.7; 		
-
-	}
+	  	VBF = VBF * b; 		
+        }
         printf("%lu\n",rto);
 	return rto*VBF;
 	//Delay Gradient Calculation end
