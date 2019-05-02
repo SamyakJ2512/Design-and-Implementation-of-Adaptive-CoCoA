@@ -11,4 +11,6 @@ CoAP is a wide application layer protocol used on top of UDP to ensure reliabili
 - Took the implementation of CoCoA++ from mentor.
 - Understood it and ran various experiments on it & recorded the results.
 - Proposed a mechanism to make the backoff adaptive.
+- Implemented the algorithm and used fixed point arithmetic to do so.
+- Tested the algorithm and obtained the results.
 
