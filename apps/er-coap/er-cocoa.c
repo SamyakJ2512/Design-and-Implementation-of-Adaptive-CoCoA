@@ -24,7 +24,7 @@
 #define LOWERVBFTHRESHOLD 1
 #define UPPERVBFTHRESHOLD 3
 
-#define MAXIMUM_OVERALLRTO 60
+#define MAXIMUM_OVERALLRTO 70
 
 #define ALPHA 0.125
 #define BETA 0.25
@@ -41,9 +41,10 @@
 // K-Value and weighting for the strong and weak estimators, respectively
 static uint8_t kValue[] = {4,1};
 static double weight[] = {0.5, 0.25};
-static double VBF = 3;
-static double a = 0;
-static double b = 1;
+static int ABF = 3000;
+
+
+
 
 
 /* exp function
@@ -117,34 +118,59 @@ clock_time_t coap_check_rto_state(clock_time_t rto, clock_time_t oldrto,uip_ipad
 }
 }
 
-
 	int avg_delta_min = t->delta_min/((t->rtt_count+1)/5);
 	int avg_delta_max = t->delta_max/((t->rtt_count+1)/5);
 	int ran_no = random_rand()%100;
 	int dlt = avg_delta_min/300;
-	//printf("DELTA MIN = %d\nDELTA MAX = %d\n",(int)avg_delta_min,(int)avg_delta_max);
-	//printf("DLT = AVG_DELTA_MIN/300 = %d\n",dlt);
 	int pbf = (((exponentof[dlt] - 1)*100)/exponentof[dlt]);
-	
 
-	//printf("PBF = %d  ",(int)pbf);
-        if(oldrto > 0)
-        {
-         a = 2 - rto / oldrto;
-         b = oldrto / rto;
-        }
-	
-	
-	if(avg_delta_min > 0 && pbf>ran_no)
+	//Adaptive CoCoA++
+	int x = (rto*1000) / oldrto ;
+	int y = (oldrto*1000) / rto ;
+
+	if(avg_delta_min > 0 && pbf > ran_no)
 	{
-		VBF = VBF + a;
+		if(oldrto > 0)
+		{
+			ABF = ABF + 2000 - x ;
+		}
+		if(ABF > 1500)
+		{
+			ABF = 1500 ;
+		}
 	}
 	else
 	{
-	  	VBF = VBF * b; 		
-        }
-        printf("%lu\n",rto);
-	return rto*VBF;
+	      if(oldrto > 0)
+	      {
+	      	ABF = ABF - y ;
+	      }	
+	      if(ABF < 500)
+	      {
+	      	ABF = 500 ;
+	      }
+	  
+	}
+
+	//printf("%d\n",ABF);
+    //printf("%lu\n",rto);
+
+    return (rto*ABF)/1000;
+
+ 	//printf("%lu ",rto);
+    //CoCoA++
+    /*if(avg_delta_min > 0 && pbf>ran_no)
+	{
+		printf("1.42\n");
+		return rto*1.42;
+	}
+	else
+	{
+		printf("0.7\n");
+	  	return rto*0.7;	
+    }*/
+
+    
 	//Delay Gradient Calculation end
 
 	/*if( avg_delta_min < ran_no*100){
@@ -154,6 +180,7 @@ clock_time_t coap_check_rto_state(clock_time_t rto, clock_time_t oldrto,uip_ipad
 		// A high initial RTO, use a small BF
 		return (rto * pbf/100);
 	}*/
+
 }
 
 //AUGUST
